@@ -70,7 +70,9 @@ namespace ServiceStack
                     { "Vary", "Accept" },
                     { "X-Powered-By", Env.ServerUserAgent },
                 },
-                IgnoreFormatsInMetadata = new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+                IgnoreFormatsInMetadata = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                {
+                },
                 AllowFileExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
                 {
                     "js", "ts", "tsx", "jsx", "css", "htm", "html", "shtm", "txt", "xml", "rss", "csv", "pdf",
@@ -129,7 +131,8 @@ namespace ServiceStack
                 XmlWriterSettings = new XmlWriterSettings
                 {
                     Encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
-                }
+                },
+                FallbackRestPath = null,
             };
 
             if (config.HandlerFactoryPath == null)

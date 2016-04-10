@@ -61,10 +61,14 @@
     <Compile Include="AsyncServiceClient.cs" />
     <Compile Include="AsyncUtils.cs" />
     <Compile Include="AuthDtos.cs" />
+    <Compile Include="CachedServiceClient.cs" />
     <Compile Include="ClientFactory.cs" />
     <Compile Include="ContentFormat.cs" />
     <Compile Include="CryptUtils.cs" />
     <Compile Include="EncryptedServiceClient.cs" />
+    <Compile Include="HttpCacheEntry.cs" />
+    <Compile Include="ICachedServiceClient.cs" />
+    <Compile Include="CsvServiceClient.cs" />
     <Compile Include="Pcl.NameValueCollectionWrapper.cs" />
     <Compile Include="PclExportClient.Xbox.cs" />
     <Compile Include="PclExportClient.Wp.cs" />
@@ -105,6 +109,7 @@
     <Compile Include="ServerEventsClient.cs" />
     <Compile Include="ServerEventsClient.Receiver.cs" />
     <Compile Include="ServiceClientBase.cs" />
+    <Compile Include="ServiceGatewayExtensions.cs" />
     <Compile Include="Soap11ServiceClient.cs" />
     <Compile Include="Soap12ServiceClient.cs" />
     <Compile Include="StreamExt.cs" />

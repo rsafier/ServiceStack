@@ -97,9 +97,19 @@
     <Compile Include="AspNet\ServiceStackPage.cs">
       <SubType>ASPXCodeBehind</SubType>
     </Compile>
+    <Compile Include="AutoQueryDataConditions.cs" />
+    <Compile Include="AutoQueryDataFeature.cs" />
+    <Compile Include="AutoQueryDataServiceSource.cs" />
+    <Compile Include="AutoQueryMetadataFeature.cs" />
+    <Compile Include="CacheInfo.cs" />
+    <Compile Include="CacheResponseAttribute.cs" />
     <Compile Include="ConnectionInfo.cs" />
+    <Compile Include="ConnectionInfoAttribute.cs" />
+    <Compile Include="CsvRequestLogger.cs" />
     <Compile Include="FluentValidation\Internal\CollectionPropertyRule.cs" />
     <Compile Include="Host\Handlers\StaticContentHandler.cs" />
+    <Compile Include="HttpCacheFeature.cs" />
+    <Compile Include="InProcessServiceGateway.cs" />
     <Compile Include="NativeTypes\Kotlin\KotlinGenerator.cs" />
     <Compile Include="RequiresSchemaProviders.cs" />
     <Compile Include="CancellableRequestsFeature.cs" />

@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Linq;
 using NUnit.Framework;
 using ServiceStack.FluentValidation;
 using ServiceStack.Messaging;
@@ -73,14 +74,22 @@ namespace ServiceStack.Common.Tests
                 }
             }.Init())
             {
-                var c = appHost.Container;
-                var dtoAValidator = (DtoARequestValidator)c.TryResolve<IValidator<DtoA>>();
+                var dtoAValidator = (DtoARequestValidator)appHost.TryResolve<IValidator<DtoA>>();
                 Assert.That(dtoAValidator, Is.Not.Null);
                 Assert.That(dtoAValidator.dtoBValidator, Is.Not.Null);
-                Assert.That(c.TryResolve<IValidator<DtoB>>(), Is.Not.Null);
-                Assert.That(c.TryResolve<IDtoBValidator>(), Is.Not.Null);
+                Assert.That(appHost.TryResolve<IValidator<DtoB>>(), Is.Not.Null);
+                Assert.That(appHost.TryResolve<IDtoBValidator>(), Is.Not.Null);
 
-                var response = appHost.ExecuteService(new DtoA());
+                var result = dtoAValidator.Validate(new DtoA());
+                Assert.That(result.IsValid, Is.False);
+                Assert.That(result.Errors.Count, Is.EqualTo(1));
+
+                result = dtoAValidator.Validate(new DtoA { FieldA = "foo", Items = new[] { new DtoB() }.ToList() });
+                Assert.That(result.IsValid, Is.False);
+                Assert.That(result.Errors.Count, Is.EqualTo(1));
+
+                result = dtoAValidator.Validate(new DtoA { FieldA = "foo", Items = new[] { new DtoB { FieldB = "bar" } }.ToList() });
+                Assert.That(result.IsValid, Is.True);
             }
         }
     }

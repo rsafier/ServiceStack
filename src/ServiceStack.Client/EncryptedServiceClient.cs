@@ -84,7 +84,7 @@ namespace ServiceStack
             return Send<TResponse>(httpMethod, (object) request);
         }
 
-        public List<TResponse> SendAll<TResponse>(IEnumerable<IReturn<TResponse>> requests)
+        public List<TResponse> SendAll<TResponse>(IEnumerable<object> requests)
         {
             byte[] cryptKey, authKey, iv;
             AesUtils.CreateCryptAuthKeysAndIv(out cryptKey, out authKey, out iv);
@@ -106,6 +106,39 @@ namespace ServiceStack
                 var response = JsonServiceClient.FromJson<List<TResponse>>(responseJson);
 
                 return response;
+            }
+            catch (WebServiceException ex)
+            {
+                throw DecryptedException(ex, cryptKey, authKey);
+            }
+        }
+
+        public void Publish(object request)
+        {
+            byte[] cryptKey, authKey, iv;
+            AesUtils.CreateCryptAuthKeysAndIv(out cryptKey, out authKey, out iv);
+
+            try
+            {
+                var encryptedMessage = CreateEncryptedMessage(request, request.GetType().Name, cryptKey, authKey, iv);
+                Client.SendOneWay(encryptedMessage);
+            }
+            catch (WebServiceException ex)
+            {
+                throw DecryptedException(ex, cryptKey, authKey);
+            }
+        }
+
+        public void PublishAll(IEnumerable<object> requests)
+        {
+            byte[] cryptKey, authKey, iv;
+            AesUtils.CreateCryptAuthKeysAndIv(out cryptKey, out authKey, out iv);
+
+            try
+            {
+                var elType = requests.GetType().GetCollectionType();
+                var encryptedMessage = CreateEncryptedMessage(requests, elType.Name + "[]", cryptKey, authKey, iv);
+                Client.SendOneWay(encryptedMessage);
             }
             catch (WebServiceException ex)
             {
@@ -139,27 +172,6 @@ namespace ServiceStack
             };
             
             return encryptedMessage;
-        }
-
-        public TResponse Send<TResponse>(IReturn<TResponse> request)
-        {
-            return Send<TResponse>((object)request);
-        }
-
-        public void Send(IReturnVoid request)
-        {
-            byte[] cryptKey, authKey, iv;
-            AesUtils.CreateCryptAuthKeysAndIv(out cryptKey, out authKey, out iv);
-
-            try
-            {
-                var encryptedMessage = CreateEncryptedMessage(request, request.GetType().Name, cryptKey, authKey, iv);
-                Client.SendOneWay(encryptedMessage);
-            }
-            catch (WebServiceException ex)
-            {
-                throw DecryptedException(ex, cryptKey, authKey);
-            }
         }
 
         public WebServiceException DecryptedException(WebServiceException ex, byte[] cryptKey, byte[] authKey)
@@ -200,6 +212,11 @@ namespace ServiceStack
                 throw new ArgumentNullException("serverPublicKeyXml");
 
             return new EncryptedServiceClient(client, serverPublicKeyXml);
+        }
+
+        public static void Send(this IEncryptedClient client, IReturnVoid request)
+        {
+            client.Publish(request);
         }
 
         public static IEncryptedClient GetEncryptedClient(this IJsonServiceClient client, RSAParameters publicKey)

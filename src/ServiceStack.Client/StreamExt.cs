@@ -14,7 +14,7 @@ namespace ServiceStack
 {
     public static class StreamExt
     {
-		#if !(SL5 || XBOX || ANDROID || __IOS__ || PCL)
+#if !(SL5 || XBOX || ANDROID || __IOS__ || __MAC__ || PCL)
         /// <summary>
         /// Compresses the specified text using the default compression method: Deflate
         /// </summary>
@@ -28,6 +28,20 @@ namespace ServiceStack
 
             if (compressionType == CompressionTypes.GZip)
                 return GZip(text);
+
+            throw new NotSupportedException(compressionType);
+        }
+
+        /// <summary>
+        /// Compresses the specified text using the default compression method: Deflate
+        /// </summary>
+        public static byte[] CompressBytes(this byte[] bytes, string compressionType)
+        {
+            if (compressionType == CompressionTypes.Deflate)
+                return DeflateProvider.Deflate(bytes);
+
+            if (compressionType == CompressionTypes.GZip)
+                return GZipProvider.GZip(bytes);
 
             throw new NotSupportedException(compressionType);
         }
@@ -49,6 +63,20 @@ namespace ServiceStack
 
             if (compressionType == CompressionTypes.GZip)
                 return GUnzip(gzBuffer);
+
+            throw new NotSupportedException(compressionType);
+        }
+
+        /// <summary>
+        /// Decompresses the specified gz buffer using the default compression method: Inflate
+        /// </summary>
+        public static byte[] DecompressBytes(this byte[] gzBuffer, string compressionType)
+        {
+            if (compressionType == CompressionTypes.Deflate)
+                return DeflateProvider.InflateBytes(gzBuffer);
+
+            if (compressionType == CompressionTypes.GZip)
+                return GZipProvider.GUnzipBytes(gzBuffer);
 
             throw new NotSupportedException(compressionType);
         }

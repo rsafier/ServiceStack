@@ -11,6 +11,7 @@ using System.Linq;
 using System.Net;
 using System.Threading.Tasks;
 using System.Reflection;
+using System.Threading;
 using ServiceStack.Auth;
 using ServiceStack.Logging;
 using ServiceStack.Messaging;
@@ -420,6 +421,23 @@ namespace ServiceStack
         }
 
         /// <summary>
+        /// Called with requestUri, ResponseType when server returns 304 NotModified
+        /// </summary>
+        public ExceptionFilterDelegate exceptionFilter;
+        public ExceptionFilterDelegate ExceptionFilter
+        {
+            get
+            {
+                return exceptionFilter;
+            }
+            set
+            {
+                exceptionFilter = value;
+                asyncClient.ExceptionFilter = value;
+            }
+        }
+
+        /// <summary>
         /// The response action is called once the server response is available.
         /// It will allow you to access raw response information. 
         /// Note that you should NOT consume the response stream as this is handled by ServiceStack
@@ -501,7 +519,7 @@ namespace ServiceStack
             }
         }
 
-        public virtual List<TResponse> SendAll<TResponse>(IEnumerable<IReturn<TResponse>> requests)
+        public virtual List<TResponse> SendAll<TResponse>(IEnumerable<object> requests)
         {
             var elType = requests.GetType().GetCollectionType();
             var requestUri = this.SyncReplyBaseUri.WithTrailingSlash() + elType.Name + "[]";
@@ -530,20 +548,26 @@ namespace ServiceStack
             }
         }
 
-        public virtual TResponse Send<TResponse>(IReturn<TResponse> request)
-        {
-            return Send<TResponse>((object)request);
-        }
-
-        public virtual void Send(IReturnVoid request)
-        {
-            SendOneWay(request);
-        }
-
         public virtual TResponse Send<TResponse>(object request)
         {
-            var requestUri = this.SyncReplyBaseUri.WithTrailingSlash() + request.GetType().Name;
-            var httpMethod = GetExplicitMethod(request) ?? HttpMethod ?? DefaultHttpMethod;
+            if (request is IVerb)
+            {
+                if (request is IGet)
+                    return Get<TResponse>(request);
+                if (request is IPost)
+                    return Post<TResponse>(request);
+                if (request is IPut)
+                    return Put<TResponse>(request);
+                if (request is IDelete)
+                    return Delete<TResponse>(request);
+                if (request is IPatch)
+                    return Patch<TResponse>(request);
+            }
+
+            var httpMethod = HttpMethod ?? DefaultHttpMethod;
+            var requestUri = ResolveUrl(httpMethod, UrlResolver == null 
+                ? this.SyncReplyBaseUri.WithTrailingSlash() + request.GetType().Name
+                : Format + "/reply/" + request.GetType().Name);
 
             if (ResultsFilter != null)
             {
@@ -557,12 +581,15 @@ namespace ServiceStack
             try
             {
                 var webResponse = PclExport.Instance.GetResponse(client);
-                var response = HandleResponse<TResponse>(webResponse);
+                ApplyWebResponseFilters(webResponse);
 
+                var response = GetResponse<TResponse>(webResponse);
                 if (ResultsFilterResponse != null)
                 {
                     ResultsFilterResponse(webResponse, response, httpMethod, requestUri, request);
                 }
+
+                DisposeIfRequired<TResponse>(webResponse);
 
                 return response;
             }
@@ -597,9 +624,10 @@ namespace ServiceStack
         protected virtual bool HandleResponseException<TResponse>(Exception ex, object request, string requestUri,
             Func<WebRequest> createWebRequest, Func<WebRequest, WebResponse> getResponse, out TResponse response)
         {
+            var webEx = ex as WebException;
             try
             {
-                if (WebRequestUtils.ShouldAuthenticate(ex, this.UserName, this.Password))
+                if (WebRequestUtils.ShouldAuthenticate(webEx, this.UserName, this.Password))
                 {
                     var client = createWebRequest();
 
@@ -623,6 +651,16 @@ namespace ServiceStack
                 // by the following method.
                 ThrowResponseTypeException<TResponse>(request, subEx, requestUri);
                 throw;
+            }
+
+            if (ExceptionFilter != null && webEx != null && webEx.Response != null)
+            {
+                var cachedResponse = ExceptionFilter(webEx, webEx.Response, requestUri, typeof(TResponse));
+                if (cachedResponse is TResponse)
+                {
+                    response = (TResponse)cachedResponse;
+                    return true;
+                }
             }
 
             // If this doesn't throw, the calling method 
@@ -873,9 +911,21 @@ namespace ServiceStack
             }
         }
 
+        public virtual void Publish(object requestDto)
+        {
+            SendOneWay(requestDto);
+        }
+
+        public void PublishAll(IEnumerable<object> requests)
+        {
+            var elType = requests.GetType().GetCollectionType();
+            var requestUri = this.AsyncOneWayBaseUri.WithTrailingSlash() + elType.Name + "[]";
+            SendOneWay(HttpMethods.Post, ResolveUrl(HttpMethods.Post, requestUri), requests);
+        }
+
         public void Publish<T>(T requestDto)
         {
-            Post(requestDto);
+            SendOneWay(requestDto);
         }
 
         public void Publish<T>(IMessage<T> message)
@@ -895,11 +945,14 @@ namespace ServiceStack
             if (message.Tag != null)
                 Headers.Set("X-Tag", message.Tag);
 
-            Post(requestDto);
+            SendOneWay(requestDto);
         }
 
         public static string GetExplicitMethod(object request)
         {
+            if (!(request is IVerb))
+                return null;
+
             return request is IGet ?
                   HttpMethods.Get
                 : request is IPost ?
@@ -928,9 +981,7 @@ namespace ServiceStack
 
         public virtual void SendAllOneWay(IEnumerable<object> requests)
         {
-            var elType = requests.GetType().GetCollectionType();
-            var requestUri = this.AsyncOneWayBaseUri.WithTrailingSlash() + elType.Name + "[]";
-            SendOneWay(HttpMethods.Post, ResolveUrl(HttpMethods.Post, requestUri), requests);
+            PublishAll(requests);
         }
 
         public virtual void SendOneWay(string httpMethod, string relativeOrAbsoluteUrl, object requestDto)
@@ -959,29 +1010,53 @@ namespace ServiceStack
             }
         }
 
-        public virtual Task<TResponse> SendAsync<TResponse>(IReturn<TResponse> requestDto)
+        public virtual Task<TResponse> SendAsync<TResponse>(object request, CancellationToken token)
         {
-            return SendAsync<TResponse>((object)requestDto);
+            if (request is IVerb)
+            {
+                if (request is IGet)
+                    return GetAsync<TResponse>(request);
+                if (request is IPost)
+                    return PostAsync<TResponse>(request);
+                if (request is IPut)
+                    return PutAsync<TResponse>(request);
+                if (request is IDelete)
+                    return DeleteAsync<TResponse>(request);
+                if (request is IPatch)
+                    return PatchAsync<TResponse>(request);
+            }
+
+            var httpMethod = HttpMethod ?? DefaultHttpMethod;
+            var requestUri = ResolveUrl(httpMethod, UrlResolver == null
+                 ? this.SyncReplyBaseUri.WithTrailingSlash() + request.GetType().Name
+                 : Format + "/reply/" + request.GetType().Name);
+
+            return asyncClient.SendAsync<TResponse>(httpMethod, requestUri, request, token);
+        }
+
+        public Task<List<TResponse>> SendAllAsync<TResponse>(IEnumerable<object> requests, CancellationToken token)
+        {
+            var elType = requests.GetType().GetCollectionType();
+            var requestUri = this.SyncReplyBaseUri.WithTrailingSlash() + elType.Name + "[]";
+            return asyncClient.SendAsync<List<TResponse>>(HttpMethods.Post, ResolveUrl(HttpMethods.Post, requestUri), requests, token);
+        }
+
+        public Task PublishAsync(object request, CancellationToken token)
+        {
+            var requestUri = this.AsyncOneWayBaseUri.WithTrailingSlash() + request.GetType().Name;
+            return asyncClient.SendAsync<byte[]>(HttpMethods.Post, ResolveUrl(HttpMethods.Post, requestUri), request, token);
+        }
+
+        public Task PublishAllAsync(IEnumerable<object> requests, CancellationToken token)
+        {
+            var elType = requests.GetType().GetCollectionType();
+            var requestUri = this.AsyncOneWayBaseUri.WithTrailingSlash() + elType.Name + "[]";
+            return asyncClient.SendAsync<byte[]>(HttpMethods.Post, ResolveUrl(HttpMethods.Post, requestUri), requests, token);
         }
 
         public virtual Task<TResponse> SendAsync<TResponse>(object request)
         {
-            var requestUri = this.SyncReplyBaseUri.WithTrailingSlash() + request.GetType().Name;
-            var httpMethod = GetExplicitMethod(request) ?? HttpMethod ?? DefaultHttpMethod;
-            return asyncClient.SendAsync<TResponse>(httpMethod, ResolveUrl(httpMethod, requestUri), request);
-        }
-
-        public virtual Task<HttpWebResponse> SendAsync(IReturnVoid requestDto)
-        {
-            return SendAsync<HttpWebResponse>(requestDto);
-        }
-
-        public virtual Task<List<TResponse>> SendAllAsync<TResponse>(IEnumerable<IReturn<TResponse>> requests)
-        {
-            var elType = requests.GetType().GetCollectionType();
-            var requestUri = this.SyncReplyBaseUri.WithTrailingSlash() + elType.Name + "[]";
-
-            return asyncClient.SendAsync<List<TResponse>>(HttpMethods.Post, ResolveUrl(HttpMethods.Post, requestUri), requests);
+            return SendAsync<TResponse>(request, default(CancellationToken));
         }
 
 
@@ -1140,12 +1215,15 @@ namespace ServiceStack
             try
             {
                 var webResponse = PclExport.Instance.GetResponse(client);
-                var response = HandleResponse<TResponse>(webResponse);
+                ApplyWebResponseFilters(webResponse);
 
+                var response = GetResponse<TResponse>(webResponse);
                 if (ResultsFilterResponse != null)
                 {
                     ResultsFilterResponse(webResponse, response, httpMethod, requestUri, request);
                 }
+
+                DisposeIfRequired<TResponse>(webResponse);
 
                 return response;
             }
@@ -1195,11 +1273,17 @@ namespace ServiceStack
             Send<byte[]>(HttpMethods.Get, ResolveTypedUrl(HttpMethods.Get, requestDto), null);
         }
 
+        /// <summary>
+        /// APIs returning HttpWebResponse must be explicitly Disposed, e.g using (var res = client.Get(url)) { ... }
+        /// </summary>
         public virtual HttpWebResponse Get(object requestDto)
         {
             return Send<HttpWebResponse>(HttpMethods.Get, ResolveTypedUrl(HttpMethods.Get, requestDto), null);
         }
 
+        /// <summary>
+        /// APIs returning HttpWebResponse must be explicitly Disposed, e.g using (var res = client.Get(url)) { ... }
+        /// </summary>
         public virtual HttpWebResponse Get(string relativeOrAbsoluteUrl)
         {
             return Send<HttpWebResponse>(HttpMethods.Get, ResolveUrl(HttpMethods.Get, relativeOrAbsoluteUrl), null);
@@ -1400,18 +1484,20 @@ namespace ServiceStack
             return Send<HttpWebResponse>(HttpMethods.Head, ResolveUrl(HttpMethods.Head, relativeOrAbsoluteUrl), null);
         }
 
-        public virtual TResponse PostFilesWithRequest<TResponse>(List<Stream> filesToUpload, List<string> fileNames, object request, string fieldName = "upload")
+        public virtual TResponse PostFilesWithRequest<TResponse>(object request, IEnumerable<UploadFile> files)
         {
-            return PostFilesWithRequest<TResponse>(ResolveTypedUrl(HttpMethods.Post, request), filesToUpload, fileNames, request, fieldName);
+            return PostFilesWithRequest<TResponse>(ResolveTypedUrl(HttpMethods.Post, request), request, files.ToArray());
         }
 
-        public virtual TResponse PostFilesWithRequest<TResponse>(string relativeOrAbsoluteUrl, List<Stream> filesToUpload, List<string> fileNames, object request, string fieldName = "upload")
+        public virtual TResponse PostFilesWithRequest<TResponse>(string relativeOrAbsoluteUrl, object request, IEnumerable<UploadFile> files)
         {
-            int fileCount = 0;
-            long currentStreamPosition = 0;
+            return PostFilesWithRequest<TResponse>(ResolveUrl(HttpMethods.Post, relativeOrAbsoluteUrl), request, files.ToArray());
+        }
 
-            var requestUri = ResolveUrl(HttpMethods.Post, relativeOrAbsoluteUrl);
-            
+        private TResponse PostFilesWithRequest<TResponse>(string requestUri, object request, UploadFile[] files)
+        {
+            var fileCount = 0;
+            long currentStreamPosition = 0;
             Func<WebRequest> createWebRequest = () =>
             {
                 var webRequest = PrepareWebRequest(HttpMethods.Post, requestUri, null, null);
@@ -1432,29 +1518,34 @@ namespace ServiceStack
                         outputStream.Write("Content-Type: text/plain;charset=utf-8{0}{1}".FormatWith(newLine, newLine));
                         outputStream.Write(nameValueCollection[key] + newLine);
                     }
-                    foreach (var file in filesToUpload)
+
+                    var buffer = new byte[4096];
+                    for (fileCount = 0; fileCount < files.Length; fileCount++)
                     {
-                        currentStreamPosition = file.Position;
-                        fileCount++;
+                        var file = files[fileCount];
+                        currentStreamPosition = file.Stream.Position;
                         outputStream.Write(boundary + newLine);
-                        var fileName = fileNames != null && fileNames.Count >= fileCount ? fileNames[fileCount - 1] : "upload{0}".Fmt(fileCount) ;
-                        outputStream.Write("Content-Disposition: form-data;name=\"{0}\";filename=\"{1}\"{2}Content-Type: application/octet-stream{3}{4}".FormatWith("{0}{1}".Fmt(fieldName,fileCount), fileName, newLine, newLine, newLine));
-                        var buffer = new byte[4096];
+                        var fileName = file.FileName ?? "upload{0}".Fmt(fileCount);
+                        var fieldName = file.FieldName ?? "upload{0}".Fmt(fileCount);
+                        outputStream.Write(string.Format(
+                            "Content-Disposition: form-data;name=\"{0}\";filename=\"{1}\"{2}Content-Type: application/octet-stream{3}{4}",
+                                fieldName, fileName, newLine, newLine, newLine));
+
                         int byteCount;
                         int bytesWritten = 0;
-                        while ((byteCount = file.Read(buffer, 0, 4096)) > 0)
+                        while ((byteCount = file.Stream.Read(buffer, 0, 4096)) > 0)
                         {
                             outputStream.Write(buffer, 0, byteCount);
 
                             if (OnUploadProgress != null)
                             {
                                 bytesWritten += byteCount;
-                                OnUploadProgress(bytesWritten, file.Length);
+                                OnUploadProgress(bytesWritten, file.Stream.Length);
                             }
                         }
                         outputStream.Write(newLine);
-                        outputStream.Write(boundary );
-                        outputStream.Write(fileCount < filesToUpload.Count ? newLine : "--");
+                        outputStream.Write(boundary);
+                        outputStream.Write(fileCount < files.Length ? newLine : "--");
                     }
                 }
 
@@ -1472,7 +1563,7 @@ namespace ServiceStack
                 TResponse response;
 
                 // restore original position before retry
-                filesToUpload[fileCount-1].Seek(currentStreamPosition, SeekOrigin.Begin);
+                files[fileCount - 1].Stream.Seek(currentStreamPosition, SeekOrigin.Begin);
 
                 if (!HandleResponseException(
                     ex, request, requestUri, createWebRequest,
@@ -1485,7 +1576,6 @@ namespace ServiceStack
                 return response;
             }
         }
-
 
         public virtual TResponse PostFileWithRequest<TResponse>(Stream fileToUpload, string fileName, object request, string fieldName = "upload")
         {
@@ -1608,8 +1698,26 @@ namespace ServiceStack
         {
             ApplyWebResponseFilters(webResponse);
 
+            var response = GetResponse<TResponse>(webResponse);
+            DisposeIfRequired<TResponse>(webResponse);
+
+            return response;            
+        }
+
+        private static void DisposeIfRequired<TResponse>(WebResponse webResponse)
+        {
+            if (typeof(TResponse) == typeof(HttpWebResponse) && webResponse is HttpWebResponse)
+                return;
+            if (typeof(TResponse) == typeof(Stream))
+                return;
+
+            using (webResponse) {}
+        }
+
+        protected TResponse GetResponse<TResponse>(WebResponse webResponse)
+        {
             //Callee Needs to dispose of response manually
-            if (typeof(TResponse) == typeof(HttpWebResponse) && (webResponse is HttpWebResponse))
+            if (typeof(TResponse) == typeof(HttpWebResponse) && webResponse is HttpWebResponse)
             {
                 return (TResponse)Convert.ChangeType(webResponse, typeof(TResponse), null);
             }
@@ -1618,7 +1726,6 @@ namespace ServiceStack
                 return (TResponse)(object)webResponse.GetResponseStream();
             }
 
-            using (webResponse)
             using (var responseStream = webResponse.GetResponseStream())
             {
                 if (typeof(TResponse) == typeof(string))
@@ -1820,4 +1927,6 @@ namespace ServiceStack
     public delegate object ResultsFilterDelegate(Type responseType, string httpMethod, string requestUri, object request);
 
     public delegate void ResultsFilterResponseDelegate(WebResponse webResponse, object response, string httpMethod, string requestUri, object request);
+
+    public delegate object ExceptionFilterDelegate(WebException webEx, WebResponse webResponse, string requestUri, Type responseType);
 }

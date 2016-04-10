@@ -82,6 +82,11 @@ namespace ServiceStack
         /// </summary>
         public ResultsFilterResponseDelegate ResultsFilterResponse { get; set; }
 
+        /// <summary>
+        /// Called with requestUri, ResponseType when server returns 304 NotModified
+        /// </summary>
+        public ExceptionFilterDelegate ExceptionFilter { get; set; }
+
         public string BaseUri { get; set; }
         public bool DisableAutoCompression { get; set; }
 
@@ -133,7 +138,7 @@ namespace ServiceStack
             }
         }
 
-        public Task<TResponse> SendAsync<TResponse>(string httpMethod, string absoluteUrl, object request)
+        public Task<TResponse> SendAsync<TResponse>(string httpMethod, string absoluteUrl, object request, CancellationToken token=default(CancellationToken))
         {
             var tcs = new TaskCompletionSource<TResponse>();
 
@@ -151,7 +156,7 @@ namespace ServiceStack
             {
                 WebResponse webRes = null;
 
-                SendWebRequest<TResponse>(httpMethod, absoluteUrl, request,
+                SendWebRequest<TResponse>(httpMethod, absoluteUrl, request, token,
                     r => {
                         ResultsFilterResponse(webRes, r, httpMethod, absoluteUrl, request);
                         tcs.SetResult(r);
@@ -162,7 +167,7 @@ namespace ServiceStack
             }
             else
             {
-                SendWebRequest<TResponse>(httpMethod, absoluteUrl, request,
+                SendWebRequest<TResponse>(httpMethod, absoluteUrl, request, token,
                     tcs.SetResult,
                     (response, exc) => tcs.SetException(exc)
                 );
@@ -171,13 +176,7 @@ namespace ServiceStack
             return tcs.Task;
         }
 
-        public void SendAsync<TResponse>(string httpMethod, string absoluteUrl, object request,
-            Action<TResponse> onSuccess, Action<object, Exception> onError)
-        {
-            SendWebRequest(httpMethod, absoluteUrl, request, onSuccess, onError);
-        }
-
-        private void SendWebRequest<TResponse>(string httpMethod, string absoluteUrl, object request, 
+        private void SendWebRequest<TResponse>(string httpMethod, string absoluteUrl, object request, CancellationToken token, 
             Action<TResponse> onSuccess, Action<object, Exception> onError, Action<WebResponse> onResponseInit = null)
         {
             if (httpMethod == null) throw new ArgumentNullException("httpMethod");
@@ -203,6 +202,7 @@ namespace ServiceStack
                 Url = requestUri,
                 WebRequest = webRequest,
                 Request = request,
+                Token = token,
                 OnResponseInit = onResponseInit,
                 OnSuccess = onSuccess,
                 OnError = onError,
@@ -268,6 +268,8 @@ namespace ServiceStack
             var requestState = (AsyncState<T>)asyncResult.AsyncState;
             try
             {
+                requestState.Token.ThrowIfCancellationRequested();
+
                 var req = requestState.WebRequest;
 
                 var stream = req.EndGetRequestStream(asyncResult);
@@ -292,6 +294,8 @@ namespace ServiceStack
             var requestState = (AsyncState<T>)asyncResult.AsyncState;
             try
             {
+                requestState.Token.ThrowIfCancellationRequested();
+
                 var webRequest = requestState.WebRequest;
 
                 requestState.WebResponse = (HttpWebResponse)webRequest.EndGetResponse(asyncResult);
@@ -323,8 +327,9 @@ namespace ServiceStack
             }
             catch (Exception ex)
             {
+                var webEx = ex as WebException;
                 var firstCall = Interlocked.Increment(ref requestState.RequestCount) == 1;
-                if (firstCall && WebRequestUtils.ShouldAuthenticate(ex, this.UserName, this.Password))
+                if (firstCall && WebRequestUtils.ShouldAuthenticate(webEx, this.UserName, this.Password))
                 {
                     try
                     {
@@ -347,6 +352,16 @@ namespace ServiceStack
                         HandleResponseError(ex, requestState);
                     }
                     return;
+                }
+
+                if (ExceptionFilter != null && webEx != null && webEx.Response != null)
+                {
+                    var cachedResponse = ExceptionFilter(webEx, webEx.Response, requestState.Url, typeof(T));
+                    if (cachedResponse is T)
+                    {
+                        requestState.OnSuccess((T)cachedResponse);
+                        return;
+                    }
                 }
 
                 HandleResponseError(ex, requestState);
@@ -380,6 +395,8 @@ namespace ServiceStack
             {
                 try
                 {
+                    requestState.Token.ThrowIfCancellationRequested();
+
                     var responseStream = requestState.ResponseStream;
 
                     int read = t.Result;
@@ -465,7 +482,7 @@ namespace ServiceStack
             var webEx = exception as WebException;
             if (PclExportClient.Instance.IsWebException(webEx))
             {
-                var errorResponse = ((HttpWebResponse)webEx.Response);
+                var errorResponse = (HttpWebResponse)webEx.Response;
                 Log.Error(webEx);
                 if (Log.IsDebugEnabled)
                 {

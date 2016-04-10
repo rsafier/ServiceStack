@@ -250,7 +250,15 @@ namespace ServiceStack
 
             EnsureSynchronizationContext();
 
-            ConnectionInfo.HeartbeatUrl.GetStringFromUrlAsync(requestFilter: HeartbeatRequestFilter)
+            ConnectionInfo.HeartbeatUrl.GetStringFromUrlAsync(requestFilter: req =>
+            {
+                    var hold = httpReq;
+                    if (hold != null)
+                        req.CookieContainer = hold.CookieContainer;
+
+                    if (HeartbeatRequestFilter != null)
+                        HeartbeatRequestFilter(req);
+                })
                 .Success(t =>
                 {
                     if (cancel.IsCancellationRequested)

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Net;
+using System.Threading;
 using System.Threading.Tasks;
 using ServiceStack.Host;
 using ServiceStack.Testing;
@@ -82,38 +83,6 @@ namespace ServiceStack.WebHost.Endpoints.Tests.Support
                 return true;
             }
             return false;
-        }
-
-        public TResponse Send<TResponse>(object request)
-        {
-            httpReq.HttpMethod = HttpMethods.Post;
-            httpReq.Dto = request;
-
-            if (ApplyRequestFilters<TResponse>(request)) return default(TResponse);
-
-            this.PopulateRequestMetadata(request);
-
-            httpReq.HttpMethod = HttpMethods.Post;
-            var response = ServiceController.Execute(request, httpReq);
-
-            if (ApplyResponseFilters<TResponse>(response)) return (TResponse)response;
-
-            return (TResponse)response;
-        }
-
-        public TResponse Send<TResponse>(IReturn<TResponse> request)
-        {
-            throw new NotImplementedException();
-        }
-
-        public void Send(IReturnVoid request)
-        {
-            throw new NotImplementedException();
-        }
-
-        public List<TResponse> SendAll<TResponse>(IEnumerable<IReturn<TResponse>> requests)
-        {
-            throw new NotImplementedException();
         }
 
         public TResponse Patch<TResponse>(string relativeOrAbsoluteUrl, object requestDto)
@@ -287,64 +256,6 @@ namespace ServiceStack.WebHost.Endpoints.Tests.Support
             throw new NotImplementedException();
         }
 
-        public Task<TResponse> SendAsync<TResponse>(IReturn<TResponse> requestDto)
-        {
-            return SendAsync<TResponse>((object)requestDto);
-        }
-
-        public Task<TResponse> SendAsync<TResponse>(object requestDto)
-        {
-            var tcs = new TaskCompletionSource<TResponse>();
-            var response = default(TResponse);
-            try
-            {
-                try
-                {
-                    if (ApplyRequestFilters<TResponse>(requestDto))
-                    {
-                        tcs.SetResult(default(TResponse));                        
-                        return tcs.Task;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    tcs.SetException(ex);
-                    return tcs.Task;
-                }
-
-                response = this.Send<TResponse>(requestDto);
-
-                try
-                {
-                    if (ApplyResponseFilters<TResponse>(requestDto))
-                    {
-                        tcs.SetResult(response);
-                        return tcs.Task;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    tcs.SetException(ex);
-                    return tcs.Task;
-                }
-
-                tcs.SetResult(response);
-                return tcs.Task;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("Error: " + ex.Message);
-
-                tcs.SetException(ex);
-                return tcs.Task;
-            }
-        }
-
-        public Task<List<TResponse>> SendAllAsync<TResponse>(IEnumerable<IReturn<TResponse>> requests)
-        {
-            throw new NotImplementedException();
-        }
-
         public void SetCredentials(string userName, string password)
         {
             throw new NotImplementedException();
@@ -455,11 +366,6 @@ namespace ServiceStack.WebHost.Endpoints.Tests.Support
             throw new NotImplementedException();
         }
 
-        public void SendAsync<TResponse>(object requestDto, Action<TResponse> onSuccess, Action<TResponse, Exception> onError)
-        {
-            throw new NotImplementedException();
-        }
-
         public void Dispose() { }
         public TResponse PostFileWithRequest<TResponse>(string relativeOrAbsoluteUrl, FileInfo fileToUpload, object request, string fieldName = "upload")
         {
@@ -467,6 +373,111 @@ namespace ServiceStack.WebHost.Endpoints.Tests.Support
         }
 
         public TResponse PostFileWithRequest<TResponse>(string relativeOrAbsoluteUrl, Stream fileToUpload, string fileName, object request, string fieldName = "upload")
+        {
+            throw new NotImplementedException();
+        }
+
+        public TResponse PostFilesWithRequest<TResponse>(object request, IEnumerable<UploadFile> files)
+        {
+            throw new NotImplementedException();
+        }
+
+        public TResponse PostFilesWithRequest<TResponse>(string relativeOrAbsoluteUrl, object request, IEnumerable<UploadFile> files)
+        {
+            throw new NotImplementedException();
+        }
+
+        public TResponse Send<TResponse>(object request)
+        {
+            httpReq.HttpMethod = HttpMethods.Post;
+            httpReq.Dto = request;
+
+            if (ApplyRequestFilters<TResponse>(request)) return default(TResponse);
+
+            this.PopulateRequestMetadata(request);
+
+            httpReq.HttpMethod = HttpMethods.Post;
+            var response = ServiceController.Execute(request, httpReq);
+
+            if (ApplyResponseFilters<TResponse>(response)) return (TResponse)response;
+
+            return (TResponse)response;
+        }
+
+        public List<TResponse> SendAll<TResponse>(IEnumerable<object> requests)
+        {
+            throw new NotImplementedException();
+        }
+
+        public void Publish(object requestDto)
+        {
+            SendOneWay(requestDto);
+        }
+
+        public void PublishAll(IEnumerable<object> requestDtos)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<TResponse> SendAsync<TResponse>(object requestDto, CancellationToken token)
+        {
+            var tcs = new TaskCompletionSource<TResponse>();
+            var response = default(TResponse);
+            try
+            {
+                try
+                {
+                    if (ApplyRequestFilters<TResponse>(requestDto))
+                    {
+                        tcs.SetResult(default(TResponse));
+                        return tcs.Task;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    tcs.SetException(ex);
+                    return tcs.Task;
+                }
+
+                response = this.Send<TResponse>(requestDto);
+
+                try
+                {
+                    if (ApplyResponseFilters<TResponse>(requestDto))
+                    {
+                        tcs.SetResult(response);
+                        return tcs.Task;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    tcs.SetException(ex);
+                    return tcs.Task;
+                }
+
+                tcs.SetResult(response);
+                return tcs.Task;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Error: " + ex.Message);
+
+                tcs.SetException(ex);
+                return tcs.Task;
+            }
+        }
+
+        public Task<List<TResponse>> SendAllAsync<TResponse>(IEnumerable<object> requests, CancellationToken token)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task PublishAsync(object requestDto, CancellationToken token)
+        {
+            return SendAsync<byte[]>(requestDto, token);
+        }
+
+        public Task PublishAllAsync(IEnumerable<object> requestDtos, CancellationToken token)
         {
             throw new NotImplementedException();
         }

@@ -4,6 +4,7 @@ using System.IO;
 using System.Net;
 using System.Reflection;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using NUnit.Framework;
 using ServiceStack.Host;
@@ -112,56 +113,6 @@ namespace ServiceStack.Common.Tests
             }
 
             public void SendAllOneWay(IEnumerable<object> requests)
-            {
-                throw new NotImplementedException();
-            }
-
-            public TResponse Send<TResponse>(object request)
-            {
-                var message = MessageFactory.Create(request);
-                var response = ServiceManager.ExecuteMessage(message);
-                var httpResult = response as IHttpResult;
-                if (httpResult != null)
-                {
-                    if (httpResult.StatusCode >= HttpStatusCode.BadRequest)
-                    {
-                        var webEx = new WebServiceException(httpResult.StatusDescription) {
-                            ResponseDto = httpResult.Response,
-                            StatusCode = httpResult.Status,
-                        };
-                        throw webEx;
-                    }
-                    return (TResponse) httpResult.Response;
-                }
-
-                var responseStatus = response.GetResponseStatus();
-                var isError = responseStatus != null && responseStatus.ErrorCode != null;
-                if (isError)
-                {
-                    var webEx = new WebServiceException(responseStatus.Message)
-                    {
-                        ResponseDto = response,
-                        StatusCode = responseStatus.Errors != null && responseStatus.Errors.Count > 0
-                            ? 400
-                            : 500,
-                    };
-                    throw webEx;
-                }
-
-                return (TResponse)response;
-            }
-
-            public TResponse Send<TResponse>(IReturn<TResponse> request)
-            {
-                throw new NotImplementedException();
-            }
-
-            public void Send(IReturnVoid request)
-            {
-                throw new NotImplementedException();
-            }
-
-            public List<TResponse> SendAll<TResponse>(IEnumerable<IReturn<TResponse>> requests)
             {
                 throw new NotImplementedException();
             }
@@ -336,31 +287,6 @@ namespace ServiceStack.Common.Tests
                 throw new NotImplementedException();
             }
 
-            public Task<TResponse> SendAsync<TResponse>(IReturn<TResponse> requestDto)
-            {
-                return SendAsync<TResponse>((object)requestDto);
-            }
-
-            public Task<TResponse> SendAsync<TResponse>(object requestDto)
-            {
-                var tcs = new TaskCompletionSource<TResponse>();
-                try
-                {
-                    var response = (TResponse)ServiceManager.Execute(requestDto);
-                    tcs.SetResult(response);
-                }
-                catch (Exception ex)
-                {
-                    HandleException(ex, (TResponse r, Exception rex) => tcs.SetException(rex));
-                }
-                return tcs.Task;
-            }
-
-            public Task<List<TResponse>> SendAllAsync<TResponse>(IEnumerable<IReturn<TResponse>> requests)
-            {
-                throw new NotImplementedException();
-            }
-
             private static void HandleException<TResponse>(Exception exception, Action<TResponse, Exception> onError)
             {
                 var response = (TResponse)typeof(TResponse).CreateInstance();
@@ -527,11 +453,6 @@ namespace ServiceStack.Common.Tests
                 throw new NotImplementedException();
             }
 
-            public void SendAsync<TResponse>(object requestDto, Action<TResponse> onSuccess, Action<TResponse, Exception> onError)
-            {
-                throw new NotImplementedException();
-            }
-
             public void Dispose() { }
             public TResponse PostFileWithRequest<TResponse>(string relativeOrAbsoluteUrl, FileInfo fileToUpload, object request, string fieldName = "upload")
             {
@@ -543,8 +464,99 @@ namespace ServiceStack.Common.Tests
                 throw new NotImplementedException();
             }
 
+            public TResponse PostFilesWithRequest<TResponse>(object request, IEnumerable<UploadFile> files)
+            {
+                throw new NotImplementedException();
+            }
+
+            public TResponse PostFilesWithRequest<TResponse>(string relativeOrAbsoluteUrl, object request, IEnumerable<UploadFile> files)
+            {
+                throw new NotImplementedException();
+            }
+
             public int Version { get; set; }
             public string SessionId { get; set; }
+
+            public TResponse Send<TResponse>(object request)
+            {
+                var message = MessageFactory.Create(request);
+                var response = ServiceManager.ExecuteMessage(message);
+                var httpResult = response as IHttpResult;
+                if (httpResult != null)
+                {
+                    if (httpResult.StatusCode >= HttpStatusCode.BadRequest)
+                    {
+                        var webEx = new WebServiceException(httpResult.StatusDescription)
+                        {
+                            ResponseDto = httpResult.Response,
+                            StatusCode = httpResult.Status,
+                        };
+                        throw webEx;
+                    }
+                    return (TResponse)httpResult.Response;
+                }
+
+                var responseStatus = response.GetResponseStatus();
+                var isError = responseStatus != null && responseStatus.ErrorCode != null;
+                if (isError)
+                {
+                    var webEx = new WebServiceException(responseStatus.Message)
+                    {
+                        ResponseDto = response,
+                        StatusCode = responseStatus.Errors != null && responseStatus.Errors.Count > 0
+                            ? 400
+                            : 500,
+                    };
+                    throw webEx;
+                }
+
+                return (TResponse)response;
+            }
+
+            public List<TResponse> SendAll<TResponse>(IEnumerable<object> requests)
+            {
+                throw new NotImplementedException();
+            }
+
+            public void Publish(object requestDto)
+            {
+                SendOneWay(requestDto);
+            }
+
+            public void PublishAll(IEnumerable<object> requestDtos)
+            {
+                throw new NotImplementedException();
+            }
+
+            public Task<TResponse> SendAsync<TResponse>(object requestDto, CancellationToken token)
+            {
+                var tcs = new TaskCompletionSource<TResponse>();
+                try
+                {
+                    var response = (TResponse)ServiceManager.Execute(requestDto);
+                    tcs.SetResult(response);
+                }
+                catch (Exception ex)
+                {
+                    HandleException(ex, (TResponse r, Exception rex) => tcs.SetException(rex));
+                }
+                return tcs.Task;
+            }
+
+            public Task<List<TResponse>> SendAllAsync<TResponse>(IEnumerable<object> requests, CancellationToken token)
+            {
+                throw new NotImplementedException();
+            }
+
+            public Task PublishAsync(object requestDto, CancellationToken token)
+            {
+                return SendAsync<byte[]>(requestDto, token);
+            }
+
+            public Task PublishAllAsync(IEnumerable<object> requestDtos, CancellationToken token)
+            {
+                throw new NotImplementedException();
+            }
         }
 
         public object ExecutePath(string pathInfo)

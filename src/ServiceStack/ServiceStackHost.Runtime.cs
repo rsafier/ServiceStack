@@ -469,6 +469,14 @@ namespace ServiceStack
             }
         }
 
+        public virtual void OnLogError(Type type, string message, Exception innerEx=null)
+        {
+            if (innerEx != null)
+                Log.Error(message, innerEx);
+            else
+                Log.Error(message);
+        }
+
         public virtual void OnSaveSession(IRequest httpReq, IAuthSession session, TimeSpan? expiresIn = null)
         {
             if (httpReq == null) return;
@@ -620,6 +628,14 @@ namespace ServiceStack
         public virtual IMessageProducer GetMessageProducer(IRequest req = null)
         {
             return Container.TryResolve<IMessageFactory>().CreateMessageProducer();
+        }
+
+        public virtual IServiceGateway GetServiceGateway(IRequest req)
+        {
+            var factory = Container.TryResolve<IServiceGatewayFactory>();
+            return factory != null ? factory.GetServiceGateway(req) 
+                : Container.TryResolve<IServiceGateway>()
+                ?? new InProcessServiceGateway(req);
         }
     }
 

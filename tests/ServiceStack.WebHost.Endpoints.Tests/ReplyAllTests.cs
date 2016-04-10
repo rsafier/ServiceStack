@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Funq;
 using NUnit.Framework;
@@ -325,6 +326,19 @@ namespace ServiceStack.WebHost.Endpoints.Tests
         }
     }
 
+    public class ReplyAllCsvServiceClientTests : ReplyAllTests
+    {
+        public override IServiceClient CreateClient(string baseUri)
+        {
+            return new CsvServiceClient(baseUri);
+        }
+
+        public override IServiceClientAsync CreateClientAsync(string baseUri)
+        {
+            return new CsvServiceClient(baseUri);
+        }
+    }
+
     [TestFixture]
     public abstract class ReplyAllTests
     {
@@ -363,7 +377,7 @@ namespace ServiceStack.WebHost.Endpoints.Tests
             var client = CreateClientAsync(Config.AbsoluteBaseUri);
 
             var request = new HelloAllAsync { Name = "Foo" };
-            var response = await client.SendAsync(request);
+            var response = await client.SendAsync<HelloAllResponse>(request);
             Assert.That(response.Result, Is.EqualTo("Hello, Foo!"));
         }
 
@@ -453,6 +467,21 @@ namespace ServiceStack.WebHost.Endpoints.Tests
         }
 
         [Test]
+        public void Can_send_PublishAll_HelloAllVoid()
+        {
+            var client = CreateClient(Config.AbsoluteBaseUri);
+
+            var requests = new[]
+            {
+                new HelloAllVoid { Name = "Foo" },
+                new HelloAllVoid { Name = "Bar" },
+                new HelloAllVoid { Name = "Baz" },
+            };
+
+            client.PublishAll(requests);
+        }
+
+        [Test]
         public void Can_send_multi_HelloAllVoidAsync()
         {
             var client = CreateClient(Config.AbsoluteBaseUri);
@@ -465,6 +494,21 @@ namespace ServiceStack.WebHost.Endpoints.Tests
             };
 
             client.SendAllOneWay(requests);
+        }
+
+        [Test]
+        public async Task Can_send_PublishAllAsync_HelloAllVoidAsync()
+        {
+            var client = CreateClient(Config.AbsoluteBaseUri);
+
+            var requests = new[]
+            {
+                new HelloAllVoidAsync { Name = "Foo" },
+                new HelloAllVoidAsync { Name = "Bar" },
+                new HelloAllVoidAsync { Name = "Baz" },
+            };
+
+            await client.PublishAllAsync(requests);
         }
 
         [Test]

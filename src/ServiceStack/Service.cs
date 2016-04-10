@@ -55,37 +55,16 @@ namespace ServiceStack
             get { return Request != null ? Request.Response : null; }
         }
 
-
-        [Obsolete("Db instance now resolved from AppHost.GetDbConnection(). This will be removed in future - declare own property if needed")]
-        public virtual IDbConnectionFactory DbFactory
-        {
-            get { return TryResolve<IDbConnectionFactory>(); }
-        }
-
-        [Obsolete("Redis instance now resolved from AppHost.GetCacheClient(). This will be removed in future - declare own property if needed")]
-        public virtual IRedisClientsManager RedisManager
-        {
-            get { return TryResolve<IRedisClientsManager>(); }
-        }
-
-        [Obsolete("MessageProducer instance now resolved from AppHost.GetMessageProducer(). This will be removed in future - declare own property if needed")]
-        private IMessageFactory messageFactory;
-        public virtual IMessageFactory MessageFactory
-        {
-            get { return messageFactory ?? (messageFactory = TryResolve<IMessageFactory>()); }
-        }
-
-
         private ICacheClient cache;
         public virtual ICacheClient Cache
         {
-            get { return cache ?? HostContext.AppHost.GetCacheClient(Request); }
+            get { return cache ?? (cache = HostContext.AppHost.GetCacheClient(Request)); }
         }
 
         private MemoryCacheClient localCache;
         public virtual MemoryCacheClient LocalCache
         {
-            get { return LocalCache ?? HostContext.AppHost.GetMemoryCacheClient(Request); }
+            get { return localCache ?? (localCache = HostContext.AppHost.GetMemoryCacheClient(Request)); }
         }
 
         private IDbConnection db;
@@ -111,6 +90,13 @@ namespace ServiceStack
         public virtual ISessionFactory SessionFactory
         {
             get { return sessionFactory ?? (sessionFactory = TryResolve<ISessionFactory>()) ?? new SessionFactory(Cache); }
+        }
+
+
+        private IServiceGateway gateway;
+        public virtual IServiceGateway Gateway
+        {
+            get { return gateway ?? (gateway = HostContext.AppHost.GetServiceGateway(Request)); }
         }
 
         /// <summary>

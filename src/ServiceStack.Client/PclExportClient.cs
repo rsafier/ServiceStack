@@ -1691,6 +1691,9 @@ namespace ServiceStack
  
         public virtual void AddHeader(WebRequest webReq, INameValueCollection headers)
         {
+            if (headers == null)
+                return;
+
             foreach (var name in headers.AllKeys)
             {
                 webReq.Headers[name] = headers[name];
@@ -1777,6 +1780,13 @@ namespace ServiceStack
         public virtual bool IsWebException(WebException webEx)
         {
             return webEx != null && webEx.Response != null;
+        }
+
+        public virtual void SetIfModifiedSince(HttpWebRequest webReq, DateTime lastModified)
+        {
+#if !(PCL || SL5)
+            webReq.IfModifiedSince = lastModified;
+#endif
         }
     }
 

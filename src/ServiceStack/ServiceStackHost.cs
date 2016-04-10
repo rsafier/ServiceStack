@@ -104,6 +104,7 @@ namespace ServiceStack
                 new PredefinedRoutesFeature(),
                 new MetadataFeature(),
                 new NativeTypesFeature(),
+                new HttpCacheFeature(),
             };
             ExcludeAutoRegisteringServiceTypes = new HashSet<Type> {
                 typeof(AuthenticateService),
@@ -154,17 +155,19 @@ namespace ServiceStack
 
             ConfigurePlugins();
 
-            if (VirtualFiles == null)
-                VirtualFiles = GetFileSystemProvider();
-
+            List<IVirtualPathProvider> pathProviders = null;
             if (VirtualFileSources == null)
             {
-                var pathProviders = GetVirtualFileSources().Where(x => x != null).ToList();
+                pathProviders = GetVirtualFileSources().Where(x => x != null).ToList();
 
                 VirtualFileSources = pathProviders.Count > 1
                     ? new MultiVirtualPathProvider(this, pathProviders.ToArray())
                     : pathProviders.First();
             }
+
+            if (VirtualFiles == null)
+                VirtualFiles = (pathProviders != null ? pathProviders.FirstOrDefault(x => x is FileSystemVirtualPathProvider) : null) as IVirtualFiles
+                    ?? GetVirtualFileSources().FirstOrDefault(x => x is FileSystemVirtualPathProvider) as IVirtualFiles;
 
             OnAfterInit();
 
@@ -215,12 +218,6 @@ namespace ServiceStack
                 .Map(x => new ResourceVirtualPathProvider(this, x)));
 
             return pathProviders;
-        }
-
-        public virtual IVirtualFiles GetFileSystemProvider()
-        {
-            var fs = GetVirtualFileSources().FirstOrDefault(x => x is FileSystemVirtualPathProvider);
-            return fs as IVirtualFiles;
         }
 
         public virtual ServiceStackHost Start(string urlBase)

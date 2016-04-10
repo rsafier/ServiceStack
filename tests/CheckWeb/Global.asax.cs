@@ -6,6 +6,7 @@ using Check.ServiceModel;
 using Check.ServiceModel.Types;
 using Funq;
 using ServiceStack;
+using ServiceStack.Admin;
 using ServiceStack.Api.Swagger;
 using ServiceStack.Data;
 using ServiceStack.Html;
@@ -37,6 +38,7 @@ namespace CheckWeb
             var nativeTypes = this.GetPlugin<NativeTypesFeature>();
             nativeTypes.MetadataTypesConfig.ExportTypes.Add(typeof(DayOfWeek));
             nativeTypes.MetadataTypesConfig.IgnoreTypes.Add(typeof(IgnoreInMetadataConfig));
+            nativeTypes.InitializeCollectionsForType = NativeTypesFeature.DontInitializeAutoQueryCollections;
 
             // Change ServiceStack configuration
             this.SetConfig(new HostConfig
@@ -78,6 +80,12 @@ namespace CheckWeb
             this.ConfigureView(container);
 
             Plugins.Add(new AutoQueryFeature());
+
+            Plugins.Add(new AutoQueryDataFeature()
+                .AddDataSource(ctx => ctx.MemorySource(GetRockstars())));
+
+            Plugins.Add(new AdminFeature());
+
             Plugins.Add(new PostmanFeature());
             Plugins.Add(new CorsFeature(allowedMethods: "GET, POST, PUT, DELETE, PATCH, OPTIONS"));
 
@@ -87,7 +95,7 @@ namespace CheckWeb
             using (var db = container.Resolve<IDbConnectionFactory>().Open())
             {
                 db.DropAndCreateTable<Rockstar>();
-                db.InsertAll(SeedRockstars);
+                db.InsertAll(GetRockstars());
             }
 
             var dbFactory = (OrmLiteConnectionFactory)container.Resolve<IDbConnectionFactory>();
@@ -105,16 +113,19 @@ namespace CheckWeb
             //JavaGenerator.AddGsonImport = true;
         }
 
-        public static Rockstar[] SeedRockstars = new[] {
-            new Rockstar { Id = 1, FirstName = "Jimi", LastName = "Hendrix", Age = 27 },
-            new Rockstar { Id = 2, FirstName = "Jim", LastName = "Morrison", Age = 27 },
-            new Rockstar { Id = 3, FirstName = "Kurt", LastName = "Cobain", Age = 27 },
-            new Rockstar { Id = 4, FirstName = "Elvis", LastName = "Presley", Age = 42 },
-            new Rockstar { Id = 5, FirstName = "David", LastName = "Grohl", Age = 44 },
-            new Rockstar { Id = 6, FirstName = "Eddie", LastName = "Vedder", Age = 48 },
-            new Rockstar { Id = 7, FirstName = "Michael", LastName = "Jackson", Age = 50 },
-        };
-
+        public static Rockstar[] GetRockstars()
+        {
+            return new[]
+            {
+                new Rockstar {Id = 1, FirstName = "Jimi", LastName = "Hendrix", Age = 27},
+                new Rockstar {Id = 2, FirstName = "Jim", LastName = "Morrison", Age = 27},
+                new Rockstar {Id = 3, FirstName = "Kurt", LastName = "Cobain", Age = 27},
+                new Rockstar {Id = 4, FirstName = "Elvis", LastName = "Presley", Age = 42},
+                new Rockstar {Id = 5, FirstName = "David", LastName = "Grohl", Age = 44},
+                new Rockstar {Id = 6, FirstName = "Eddie", LastName = "Vedder", Age = 48},
+                new Rockstar {Id = 7, FirstName = "Michael", LastName = "Jackson", Age = 50},
+            };
+        }
 
         /// <summary>
         /// Configure JSON serialization properties.

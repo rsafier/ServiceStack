@@ -10,6 +10,7 @@ using System.ServiceModel;
 using System.ServiceModel.Channels;
 using System.ServiceModel.Description;
 using System.ServiceModel.Dispatcher;
+using System.Threading;
 using ServiceStack.Serialization;
 
 namespace ServiceStack
@@ -340,10 +341,20 @@ namespace ServiceStack
 
         public void Send(IReturnVoid request)
         {
+            Send<byte[]>(request);
+        }
+
+        public void Publish(object requestDto)
+        {
+            SendOneWay(requestDto);
+        }
+
+        public void PublishAll(IEnumerable<object> requestDtos)
+        {
             throw new NotImplementedException();
         }
 
-        public List<TResponse> SendAll<TResponse>(IEnumerable<IReturn<TResponse>> requests)
+        public List<TResponse> SendAll<TResponse>(IEnumerable<object> requests)
         {
             throw new NotImplementedException();
         }
@@ -657,7 +668,7 @@ namespace ServiceStack
             throw new NotImplementedException();
         }
 
-        public Task<List<TResponse>> SendAllAsync<TResponse>(IEnumerable<IReturn<TResponse>> requests)
+        public Task<List<TResponse>> SendAllAsync<TResponse>(IEnumerable<object> requests)
         {
             throw new NotImplementedException();
         }
@@ -672,6 +683,46 @@ namespace ServiceStack
         }
 
         public TResponse PostFileWithRequest<TResponse>(string relativeOrAbsoluteUrl, Stream fileToUpload, string fileName, object request, string fieldName = "upload")
+        {
+            throw new NotImplementedException();
+        }
+
+        public TResponse PostFilesWithRequest<TResponse>(object request, IEnumerable<UploadFile> files)
+        {
+            throw new NotImplementedException();
+        }
+
+        public TResponse PostFilesWithRequest<TResponse>(string relativeOrAbsoluteUrl, object request, IEnumerable<UploadFile> files)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<TResponse> SendAsync<TResponse>(object requestDto, CancellationToken token)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<TResponse> SendAsync<TResponse>(IReturn<TResponse> requestDto, CancellationToken token)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<List<TResponse>> SendAllAsync<TResponse>(IEnumerable<object> requests, CancellationToken token)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task SendAsync(IReturnVoid requestDto, CancellationToken token)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task PublishAsync(object requestDto, CancellationToken token)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task PublishAllAsync(IEnumerable<object> requestDtos, CancellationToken token)
         {
             throw new NotImplementedException();
         }
